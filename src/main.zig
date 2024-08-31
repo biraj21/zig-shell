@@ -19,6 +19,20 @@ pub fn main() !void {
             const status_arg = it.next() orelse "";
             const status = std.fmt.parseInt(u8, status_arg, 10) catch @as(u8, 0);
             std.process.exit(status);
+        } else if (std.mem.eql(u8, command, "echo")) {
+            var is_first_arg = true;
+            while (it.next()) |arg| {
+                if (!is_first_arg) {
+                    try stdout.print(" ", .{});
+                } else {
+                    is_first_arg = false;
+                }
+
+                try stdout.print("{s}", .{arg});
+            }
+
+            try stdout.print("\n", .{});
+            continue;
         }
 
         try stdout.print("{s}: command not found\n", .{command});
