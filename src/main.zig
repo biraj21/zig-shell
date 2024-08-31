@@ -27,12 +27,38 @@ pub fn main() !void {
             continue;
         }
 
+        // try executing builtin
         const builtin = builtinsHash.get(command);
         if (builtin) |builtin_func| {
             try builtin_func(&it);
             continue;
         }
 
+        // try executing program in PATH
+        const allocator = std.heap.page_allocator;
+        const full_path_or_null = try getFullPath(allocator, command);
+        if (full_path_or_null) |full_path| {
+            defer allocator.free(full_path);
+
+            var args = try allocator.alloc([]const u8, 1);
+            defer allocator.free(args);
+
+            args[0] = full_path;
+            while (it.next()) |arg| {
+                args = try allocator.realloc(args, args.len + 1);
+                args[args.len - 1] = arg;
+            }
+
+            if (!std.process.can_spawn) {
+                return error.CannotSpawn;
+            }
+
+            var child = std.process.Child.init(args, allocator);
+            _ = try child.spawnAndWait();
+            continue;
+        }
+
+        // command not found
         try stdout.print("{s}: command not found\n", .{command});
     }
 }
@@ -74,13 +100,25 @@ fn type_(args_it: *std.mem.SplitIterator(u8, .sequence)) anyerror!void {
     }
 
     const allocator = std.heap.page_allocator;
+    const full_path_or_null = try getFullPath(allocator, arg);
+    if (full_path_or_null) |full_path| {
+        try stdout.print("{s} is {s}\n", .{ arg, full_path });
+        allocator.free(full_path);
+    } else {
+        try stdout.print("{s}: not found\n", .{arg});
+    }
+}
+
+fn getFullPath(allocator: std.mem.Allocator, command: []const u8) anyerror!?[]const u8 {
+    if (command.len == 0) {
+        return error.InvalidCommand;
+    }
+
     const env_vars = try std.process.getEnvMap(allocator);
     const path_value = env_vars.get("PATH") orelse "";
     var path_it = std.mem.split(u8, path_value, ":");
     while (path_it.next()) |path| {
-        const full_path = try std.fs.path.join(allocator, &[_][]const u8{ path, arg });
-        defer allocator.free(full_path);
-
+        const full_path = try std.fs.path.join(allocator, &[_][]const u8{ path, command });
         const file = std.fs.openFileAbsolute(full_path, .{ .mode = .read_only }) catch {
             continue;
         };
@@ -95,9 +133,8 @@ fn type_(args_it: *std.mem.SplitIterator(u8, .sequence)) anyerror!void {
             continue;
         }
 
-        try stdout.print("{s} is {s}\n", .{ arg, full_path });
-        return;
+        return full_path;
     }
 
-    try stdout.print("{s}: not found\n", .{arg});
+    return null;
 }
