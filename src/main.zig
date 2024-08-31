@@ -8,6 +8,7 @@ pub fn main() !void {
     builtinsHash = std.StringHashMap(FnType).init(std.heap.page_allocator);
     defer builtinsHash.deinit();
 
+    try builtinsHash.put("cd", &cd);
     try builtinsHash.put("echo", &echo);
     try builtinsHash.put("exit", &exit);
     try builtinsHash.put("pwd", &pwd);
@@ -62,6 +63,23 @@ pub fn main() !void {
         // command not found
         try stdout.print("{s}: command not found\n", .{command});
     }
+}
+
+fn cd(args_it: *std.mem.SplitIterator(u8, .sequence)) !void {
+    const stderr = std.io.getStdErr().writer();
+
+    const path_arg = args_it.next() orelse "";
+    std.process.changeCurDir(path_arg) catch |err| switch (err) {
+        error.FileNotFound => {
+            try stderr.print("cd: {s}: No such file or directory\n", .{path_arg});
+        },
+        error.NotDir => {
+            try stderr.print("cd: {s}: Not a directory\n", .{path_arg});
+        },
+        else => {
+            return err;
+        },
+    };
 }
 
 fn echo(args_it: *std.mem.SplitIterator(u8, .sequence)) !void {
