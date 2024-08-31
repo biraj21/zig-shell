@@ -10,6 +10,7 @@ pub fn main() !void {
 
     try builtinsHash.put("echo", &echo);
     try builtinsHash.put("exit", &exit);
+    try builtinsHash.put("pwd", &pwd);
     try builtinsHash.put("type", &type_);
 
     while (true) {
@@ -63,7 +64,7 @@ pub fn main() !void {
     }
 }
 
-fn echo(args_it: *std.mem.SplitIterator(u8, .sequence)) anyerror!void {
+fn echo(args_it: *std.mem.SplitIterator(u8, .sequence)) !void {
     const stdout = std.io.getStdOut().writer();
 
     var is_first_arg = true;
@@ -80,14 +81,25 @@ fn echo(args_it: *std.mem.SplitIterator(u8, .sequence)) anyerror!void {
     try stdout.print("\n", .{});
 }
 
-fn exit(args_it: *std.mem.SplitIterator(u8, .sequence)) anyerror!void {
+fn exit(args_it: *std.mem.SplitIterator(u8, .sequence)) !void {
     var status: u8 = 0;
     const status_arg = args_it.next() orelse "";
     status = std.fmt.parseInt(u8, status_arg, 10) catch @as(u8, 0);
     std.process.exit(status);
 }
 
-fn type_(args_it: *std.mem.SplitIterator(u8, .sequence)) anyerror!void {
+fn pwd(args_it: *std.mem.SplitIterator(u8, .sequence)) !void {
+    _ = args_it;
+
+    const stdout = std.io.getStdOut().writer();
+    const allocator = std.heap.page_allocator;
+    const cwd = try std.process.getCwdAlloc(allocator);
+    defer allocator.free(cwd);
+
+    try stdout.print("{s}\n", .{cwd});
+}
+
+fn type_(args_it: *std.mem.SplitIterator(u8, .sequence)) !void {
     const stdout = std.io.getStdOut().writer();
     const arg = args_it.next() orelse "";
     if (arg.len == 0) {
@@ -109,7 +121,7 @@ fn type_(args_it: *std.mem.SplitIterator(u8, .sequence)) anyerror!void {
     }
 }
 
-fn getFullPath(allocator: std.mem.Allocator, command: []const u8) anyerror!?[]const u8 {
+fn getFullPath(allocator: std.mem.Allocator, command: []const u8) !?[]const u8 {
     if (command.len == 0) {
         return error.InvalidCommand;
     }
