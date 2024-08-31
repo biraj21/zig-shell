@@ -10,6 +10,7 @@ pub fn main() !void {
 
     try builtinsHash.put("echo", &echo);
     try builtinsHash.put("exit", &exit);
+    try builtinsHash.put("type", &type_);
 
     while (true) {
         const stdout = std.io.getStdOut().writer();
@@ -27,8 +28,8 @@ pub fn main() !void {
         }
 
         const builtin = builtinsHash.get(command);
-        if (builtin) |f| {
-            try f(&it);
+        if (builtin) |builtin_func| {
+            try builtin_func(&it);
             continue;
         }
 
@@ -58,4 +59,18 @@ fn exit(args_it: *std.mem.SplitIterator(u8, .sequence)) anyerror!void {
     const status_arg = args_it.next() orelse "";
     status = std.fmt.parseInt(u8, status_arg, 10) catch @as(u8, 0);
     std.process.exit(status);
+}
+
+fn type_(args_it: *std.mem.SplitIterator(u8, .sequence)) anyerror!void {
+    const stdout = std.io.getStdOut().writer();
+    const arg = args_it.next() orelse "";
+    if (arg.len == 0) {
+        return;
+    }
+
+    if (builtinsHash.contains(arg)) {
+        try stdout.print("{s} is a shell builtin\n", .{arg});
+    } else {
+        try stdout.print("{s}: not found\n", .{arg});
+    }
 }
