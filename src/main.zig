@@ -70,7 +70,34 @@ fn type_(args_it: *std.mem.SplitIterator(u8, .sequence)) anyerror!void {
 
     if (builtinsHash.contains(arg)) {
         try stdout.print("{s} is a shell builtin\n", .{arg});
-    } else {
-        try stdout.print("{s}: not found\n", .{arg});
+        return;
     }
+
+    const allocator = std.heap.page_allocator;
+    const env_vars = try std.process.getEnvMap(allocator);
+    const path_value = env_vars.get("PATH") orelse "";
+    var path_it = std.mem.split(u8, path_value, ":");
+    while (path_it.next()) |path| {
+        const full_path = try std.fs.path.join(allocator, &[_][]const u8{ path, arg });
+        defer allocator.free(full_path);
+
+        const file = std.fs.openFileAbsolute(full_path, .{ .mode = .read_only }) catch {
+            continue;
+        };
+        defer file.close();
+
+        const mode = file.mode() catch {
+            continue;
+        };
+
+        const is_executable = mode & 0b001 != 0;
+        if (!is_executable) {
+            continue;
+        }
+
+        try stdout.print("{s} is {s}\n", .{ arg, full_path });
+        return;
+    }
+
+    try stdout.print("{s}: not found\n", .{arg});
 }
